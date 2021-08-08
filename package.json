@@ -1,0 +1,12 @@
+{
+  "name": "orpizza-backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "firebase deploy"
+  },
+  "description": "Serves ||pizza codes",
+  "keywords": [],
+  "author": "chris01b",
+  "license": "ISC"
+}
