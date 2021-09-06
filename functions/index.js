@@ -9,7 +9,7 @@ const PastebinAPI = require('pastebin-js');
 const pastebinSecret = functions.config().keys.pastebin;
 const pastebin = new PastebinAPI(pastebinSecret);
 const endpointSecret = functions.config().keys.signing;
-const priceId = functions.config().keys.priceId;
+const price = functions.config().keys.price;
 
 admin.initializeApp();
 
@@ -22,7 +22,7 @@ exports.checkout_sessions = functions.https.onRequest((req, res) => {
           mode: 'payment',
           payment_method_types: ['card'],
           line_items: [{
-            price: priceId,
+            price: price,
             adjustable_quantity: {
               enabled: true,
               minimum: 1,
@@ -71,8 +71,10 @@ function generatePhoneNumber() {
       let res = err.response;
       let params = querystring.parse(res.request.path.split("?").pop());
       if (params.success === 'true') {
+        console.log(formattedNumber, 'worked to generate', params["offers[0]"]);
         resolve(params["offers[0]"]);
       } else if (params.error === 'Invalid phone number or configuration') {
+        console.log(formattedNumber, 'didn\'t work');
         generatePhoneNumber().then(code => resolve(code));
       } else {
         reject(params);
@@ -101,28 +103,40 @@ function getOrderQuantity(event) {
 
 function fulfillOrder(event, quantity) {
   // Run this once every generatePhoneNumber promise resolves
-  Promise.all(generatePhoneNumberIterable(quantity)).then(codes => {
+  Promise.all(generatePhoneNumberIterable(quantity)).then(async codes => {
+    console.log('Going to commit', codes, 'to orders');
     // Generate a pastebin link to host the codes
     if (quantity !== 1) {
       pastebin.createPaste(codes.join('\n'), event.data.object.id, 'text', 1, 'N')
-      .then(data => {
-        console.log(data);
+      .then(async data => {
         // Post the codes and its pastebin url
-        admin.database().ref('/orders').child(event.data.object.id).set({
-            codes: codes,
-            pasteUrl: data,
-            created: event.created,
-            customerId: event.data.object.customer,
-            ...event.data.object.customer_details
-          }).catch(e => console.error(e));
-      }).fail(e => console.log(e));
+        await admin.database().ref('/orders').child(event.data.object.id).set({
+          codes: codes,
+          pasteUrl: data,
+          created: event.created,
+          customerId: event.data.object.customer,
+          ...event.data.object.customer_details
+        }, e => {
+          if (e) {
+            console.error(e);
+          } else {
+            console.log('code saved successfully');
+          }
+        })
+      }).fail(e => console.error(e));
     } else { // Just post the one code
-      admin.database().ref('/orders').child(event.data.object.id).set({
+      await admin.database().ref('/orders').child(event.data.object.id).set({
         code: codes[0],
         created: event.created,
         customerId: event.data.object.customer,
         ...event.data.object.customer_details
-      }).catch(e => console.error(e));
+      }, e => {
+        if (e) {
+          console.error(e);
+        } else {
+          console.log('code saved successfully');
+        }
+      })
     }
   }).catch(e => console.error(e));
 }

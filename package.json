@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "firebase deploy"
+    "start": "firebase deploy",
+    "deploy": "firebase deploy"
   },
   "description": "Serves ||pizza codes",
   "keywords": [],
