@@ -101,7 +101,23 @@ function getOrderQuantity(event) {
   });
 }
 
-function fulfillOrder(event, quantity) {
+function fulfillOrder(event, quantity, i) {
+  const dbCallback = e => {
+    if (e) {
+      console.error(e);
+      console.log(e);
+      if (i < 3) {
+        fulfillOrder(event, quantity, i + 1);
+      } else {
+        const message = 'Committing failed 3 times';
+        console.error(message);
+        console.log(message);
+      }
+    } else {
+      console.log('Code saved successfully');
+    }
+  }
+
   // Run this once every generatePhoneNumber promise resolves
   Promise.all(generatePhoneNumberIterable(quantity)).then(async codes => {
     console.log('Going to commit', codes, 'to orders');
@@ -116,13 +132,7 @@ function fulfillOrder(event, quantity) {
           created: event.created,
           customerId: event.data.object.customer,
           ...event.data.object.customer_details
-        }, e => {
-          if (e) {
-            console.error(e);
-          } else {
-            console.log('code saved successfully');
-          }
-        })
+        }, e => dbCallback(e));
       }).fail(e => console.error(e));
     } else { // Just post the one code
       await admin.database().ref('/orders').child(event.data.object.id).set({
@@ -130,13 +140,7 @@ function fulfillOrder(event, quantity) {
         created: event.created,
         customerId: event.data.object.customer,
         ...event.data.object.customer_details
-      }, e => {
-        if (e) {
-          console.error(e);
-        } else {
-          console.log('code saved successfully');
-        }
-      })
+      }, e => dbCallback(e));
     }
   }).catch(e => console.error(e));
 }
@@ -159,14 +163,14 @@ exports.generateCode = functions.https.onRequest((req, res) => {
     switch (event.type) {
       case 'checkout.session.completed': {
         getOrderQuantity(event)
-        .then(quantity => fulfillOrder(event, quantity))
+        .then(quantity => fulfillOrder(event, quantity, 0))
         .catch(e => console.error(e));
         break;
       }
       case 'checkout.session.async_payment_succeeded': {
         if (event.data.object.payment_status === 'paid') {
           getOrderQuantity(event)
-          .then(quantity => fulfillOrder(event, quantity))
+          .then(quantity => fulfillOrder(event, quantity, 0))
           .catch(e => console.error(e));
           break;
         }
