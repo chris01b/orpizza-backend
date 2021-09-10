@@ -9,5 +9,8 @@
   "description": "Serves ||pizza codes",
   "keywords": [],
   "author": "chris01b",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "firebase-functions": "^3.15.5"
+  }
 }

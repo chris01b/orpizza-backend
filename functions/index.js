@@ -71,10 +71,10 @@ function generatePhoneNumber() {
       let res = err.response;
       let params = querystring.parse(res.request.path.split("?").pop());
       if (params.success === 'true') {
-        console.log(formattedNumber, 'worked to generate', params["offers[0]"]);
+        functions.logger.log(formattedNumber, 'worked to generate', params["offers[0]"]);
         resolve(params["offers[0]"]);
       } else if (params.error === 'Invalid phone number or configuration') {
-        console.log(formattedNumber, 'didn\'t work');
+        functions.logger.log(formattedNumber, 'didn\'t work');
         generatePhoneNumber().then(code => resolve(code));
       } else {
         reject(params);
@@ -104,23 +104,21 @@ function getOrderQuantity(event) {
 function fulfillOrder(event, quantity, i) {
   const dbCallback = e => {
     if (e) {
-      console.error(e);
-      console.log(e);
-      if (i < 3) {
+      functions.logger.error(e);
+      if (i < 10) {
+        functions.logger.warn(`Committing failed ${i + 1} times`);
         fulfillOrder(event, quantity, i + 1);
       } else {
-        const message = 'Committing failed 3 times';
-        console.error(message);
-        console.log(message);
+        functions.logger.warn(`Committing failed ${i + 1} times. Giving up.`);
       }
     } else {
-      console.log('Code saved successfully');
+      functions.logger.log('Code saved successfully');
     }
   }
 
   // Run this once every generatePhoneNumber promise resolves
   Promise.all(generatePhoneNumberIterable(quantity)).then(async codes => {
-    console.log('Going to commit', codes, 'to orders');
+    functions.logger.log('Going to commit', codes, 'to orders');
     // Generate a pastebin link to host the codes
     if (quantity !== 1) {
       pastebin.createPaste(codes.join('\n'), event.data.object.id, 'text', 1, 'N')
@@ -133,7 +131,7 @@ function fulfillOrder(event, quantity, i) {
           customerId: event.data.object.customer,
           ...event.data.object.customer_details
         }, e => dbCallback(e));
-      }).fail(e => console.error(e));
+      }).fail(e => functions.logger.error(e));
     } else { // Just post the one code
       await admin.database().ref('/orders').child(event.data.object.id).set({
         code: codes[0],
@@ -142,7 +140,7 @@ function fulfillOrder(event, quantity, i) {
         ...event.data.object.customer_details
       }, e => dbCallback(e));
     }
-  }).catch(e => console.error(e));
+  }).catch(e => functions.logger.error(e));
 }
 
 // realtime database and webhook endpoint in stripe on checkout.session.completed to associate checkout.id with the code
@@ -164,14 +162,14 @@ exports.generateCode = functions.https.onRequest((req, res) => {
       case 'checkout.session.completed': {
         getOrderQuantity(event)
         .then(quantity => fulfillOrder(event, quantity, 0))
-        .catch(e => console.error(e));
+        .catch(e => functions.logger.error(e));
         break;
       }
       case 'checkout.session.async_payment_succeeded': {
         if (event.data.object.payment_status === 'paid') {
           getOrderQuantity(event)
           .then(quantity => fulfillOrder(event, quantity, 0))
-          .catch(e => console.error(e));
+          .catch(e => functions.logger.error(e));
           break;
         }
       }
@@ -182,7 +180,7 @@ exports.generateCode = functions.https.onRequest((req, res) => {
 // Get code from database to respond to polling
 exports.getCode = functions.https.onRequest((req, res) => {
   cors(req, res, () => {
-    console.log("key:", req.header('Authorization'));
+    functions.logger.log("key:", req.header('Authorization'));
     admin.database().ref('orders')
     .child(req.header('Authorization'))
     .once('value', snapshot => {
@@ -193,7 +191,7 @@ exports.getCode = functions.https.onRequest((req, res) => {
         } else if (data.hasOwnProperty('pasteUrl')) {
           return res.status(200).send({ pasteUrl: data.pasteUrl });
         }
-      } catch (e) { console.error(e) }
-    }).catch(e => console.error(e));
+      } catch (e) { functions.logger.info('1:', e) }
+    }).catch(e => functions.logger.info('2:', e));
   });
 });
